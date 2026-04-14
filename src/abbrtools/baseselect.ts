@@ -23,6 +23,10 @@ class ResultInfo {
   strinfo = "";
 }
 
+function normalizeJournalKey(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 /**
  * 定义基本的函数类
  * @class Basefun
@@ -390,7 +394,7 @@ class Selected {
    */
   static async exchangeJournalName(
     key1: string = "journalAbbreviation",
-    key2: string= "publicationTitle",
+    key2: string = "publicationTitle",
     exchangetagname: string = "exchange",
     selectedItems?: Array<Zotero.Item>,
   ) {
@@ -521,6 +525,34 @@ class Selected {
         newField,
         addtagsname,
         removetagsname,
+      ),
+      successinfo,
+      errorinfo,
+      showInfo,
+      selectedItems,
+    );
+  }
+
+  static async updateJournalAbbrWithFallback(
+    primaryData: { [key: string]: any },
+    fallbackData: { [key: string]: any },
+    oldField: string,
+    newField: string,
+    sourceTags: { nlm: string[]; legacy: string[] },
+    clearTags: string[],
+    successinfo: string,
+    errorinfo: string,
+    showInfo: boolean,
+    selectedItems?: Array<Zotero.Item>,
+  ): Promise<void> {
+    await Basefun.processSelectedItemsWithPromise(
+      SelectedWithHandler.updateJournalAbbrHandlerWithFallback(
+        primaryData,
+        fallbackData,
+        oldField,
+        newField,
+        sourceTags,
+        clearTags,
       ),
       successinfo,
       errorinfo,
@@ -951,11 +983,16 @@ class SelectedWithHandler {
    */
   static removeTagHandler(usertags: string[]): (item: any) => Promise<boolean> {
     return async (item: any) => {
-      const success = item.removeTag(usertags[0]);
-      if (success) {
+      const existingTags = new Set(
+        item.getTags().map((tagObj: any) => tagObj.tag),
+      );
+      const tagsToRemove = usertags.filter((tag) => existingTags.has(tag));
+      if (tagsToRemove.length > 0) {
+        tagsToRemove.forEach((tag) => item.removeTag(tag));
         await item.saveTx();
+        return true;
       }
-      return success;
+      return false;
     };
   }
 
@@ -997,11 +1034,7 @@ class SelectedWithHandler {
         return false;
       }
 
-      const journalKey = currentjournal
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .trim();
+      const journalKey = normalizeJournalKey(currentjournal);
       const data_in_journal = data[journalKey]?.trim();
       if (!journalKey || !data_in_journal) {
         return false;
@@ -1029,6 +1062,70 @@ class SelectedWithHandler {
 
       if (tagsToRemove.length > 0 || tagsToAdd.length > 0 || !isIdentical) {
         // 当前条目的标签发生了变化, 或者当前条目的期刊缩写发生了变化, 则保存
+        await item.saveTx();
+      }
+      return true;
+    };
+  }
+
+  static updateJournalAbbrHandlerWithFallback(
+    primaryData: { [key: string]: any },
+    fallbackData: { [key: string]: any },
+    oldField: string,
+    newField: string,
+    sourceTags: { nlm: string[]; legacy: string[] },
+    clearTags: string[],
+  ) {
+    return async (item: any) => {
+      let currentjournal;
+      let currentabbr;
+      if (oldField === "itemBoxRowabbr") {
+        currentjournal = await ztoolkit.ExtraField.getExtraField(
+          item,
+          oldField,
+        );
+      } else {
+        currentjournal = await item.getField(oldField);
+      }
+
+      if (newField === "itemBoxRowabbr") {
+        currentabbr = await ztoolkit.ExtraField.getExtraField(item, newField);
+      } else {
+        currentabbr = await item.getField(newField);
+      }
+
+      if (!currentjournal) {
+        return false;
+      }
+
+      const journalKey = normalizeJournalKey(currentjournal);
+      const primaryMatch = primaryData[journalKey]?.trim();
+      const fallbackMatch = fallbackData[journalKey]?.trim();
+      const nextAbbr = primaryMatch || fallbackMatch;
+
+      if (!journalKey || !nextAbbr) {
+        return false;
+      }
+
+      const nextTags = primaryMatch ? sourceTags.nlm : sourceTags.legacy;
+      const isIdentical = currentabbr?.trim() === nextAbbr.trim();
+
+      if (!isIdentical) {
+        item.setField(newField, nextAbbr);
+      }
+
+      const existingTags = new Set(
+        item.getTags().map((tagObj: any) => tagObj.tag),
+      );
+      const tagsToAdd = nextTags.filter((tag) => !existingTags.has(tag));
+      const tagsToRemove = clearTags.filter(
+        (tag) => !nextTags.includes(tag) && existingTags.has(tag),
+      );
+
+      tagsToRemove.forEach((tag) => item.removeTag(tag));
+      tagsToAdd.forEach((tag) => item.addTag(tag));
+
+      if (tagsToRemove.length > 0 || tagsToAdd.length > 0 || !isIdentical) {
         await item.saveTx();
       }
       return true;

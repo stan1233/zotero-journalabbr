@@ -1,6 +1,6 @@
 ## 功能介绍
 
-- 备注: 内置缩写表不一定准确, 导出数据以后需要仔细检查
+- 备注: 内置主数据源采用 NLM 官方 `J_Entrez` 的 `MedAbbr`, 未命中时回退到冻结的 legacy 数据表
 
 右键菜单如下
 
@@ -29,24 +29,18 @@
   - 第一, 首先需要配置好 `csv` 或者 `json` 路径,
   - 第二, 如果是 `csv` 文件, 则第一列为期刊全名, 第二列为缩写期刊,
   - 第三, 如果是 `json` 文件, 则按照 `json` 格式书写即可, `key` 为期刊全名, `value` 为缩写期刊名
-  - 在进行期刊简写的时候, 会自动添加 `abbr_user`标签, 并且会自动检测该条目是否存在 `abbr` 和 `abbr-iso4` 标签, 如果存在则会删除,
+  - 在进行期刊简写的时候, 会自动添加 `abbr_user`标签, 并且会自动检测该条目是否存在 `abbr`、`abbr_nlm`、`abbr_legacy` 和 `abbr_iso4` 标签, 如果存在则会删除,
 
 - `内置缩写`: 即采用插件提供的内置数据进行期刊缩写
 
-  - 自动添加 `abbr` 标签, 并删除 `abbr_user` 和 `abbr-iso4` 标签
-  - 内置数据的来源: [JabRef/abbrv.jabref.org](https://github.com/JabRef/abbrv.jabref.org) 和 [该网站](https://woodward.library.ubc.ca/woodward/research-help/journal-abbreviations/) 的期刊缩写数据库, 感谢
-
-    - 这里对其两个数据进行了整合, 按照一定规则进行数据处理排序, 基本思想,不改变数据中的值, 只当数据搬运工.
-    - 内置期刊缩写的权重优先级: `该网站 > JabRef/abbrv.jabref.org `
-    - `JabRef/abbrv.jabref.org` 数据处理规则:
-      - 删除了一些特殊的期刊, 比如期刊名中存在 单双引号, 单反斜杠等特殊字符
-      - 删除了期刊字符超过 80 以及期刊字符小于5的期刊
-      - 对于同一个期刊可能存在多个缩写, 其优先顺序 `点的个数 > 大写个数> 缩写短的`
-    - 具体来自仓库：[zoushucai/journalmerge](https://github.com/zoushucai/journalmerge)
+  - 优先命中 NLM 数据时自动添加 `abbr_nlm` 标签, 并删除 `abbr`、`abbr_legacy`、`abbr_user` 和 `abbr_iso4` 标签
+  - 如果 NLM 未命中, 则回退到冻结的 legacy 数据表, 并添加 `abbr_legacy` 标签
+  - 内置主数据来源: [NLM J_Entrez](https://ftp.ncbi.nlm.nih.gov/pubmed/J_Entrez.txt), 采用 `JournalTitle => MedAbbr`
+  - legacy 回退数据是旧版内置快照, 仅用于兜底, 不再自动更新
 
 - `ISO-4 standard` 采用 ISO-4 的标准来缩写期刊, 来源 [marcinwrochna/abbrevIso](https://github.com/marcinwrochna/abbrevIso), 这里只是做了整合, 感谢其作者
 
-  - 自动添加 `abbr-iso4` 标签, 并删除 `abbr_user` 和 `abbr` 标签
+  - 自动添加 `abbr_iso4` 标签, 并删除 `abbr_user`、`abbr`、`abbr_nlm` 和 `abbr_legacy` 标签
 
 - `一步更新`: 即首先选择`ISO-4 standard`, 然后选择 `内置期刊缩写`, 最后选择 `用户期刊缩写`
 
@@ -68,9 +62,9 @@
 
 - `abbrmanual` 选项, 把不同类型的条目归因在一个字段上, 这个字段在右侧显示为`abbr` .
 
-- `abbrauto` 选项， 与 `abbrmanual` 选项不同的是,  这个会对先对条目进行缩写(按照一定规则), 然后把缩写的结果放入右侧面板中
+- `abbrauto` 选项， 与 `abbrmanual` 选项不同的是, 这个会对先对条目进行缩写(按照一定规则), 然后把缩写的结果放入右侧面板中
 
-  - 规则如下:  先所有条目进行分类,  先利用 ISO-4 的标准进行缩写, 然后利用内置的数据进行缩写, 最后利用用户自定义的数据进行缩写, 从而实现优先级: `自定义 > 内置数据 > ISO-4 standard`. 且如果用户没有自定义数据文件,虽然会提示有错,但是不影响使用. (不过这样每次运行会消耗一点点时间)
+  - 规则如下: 先所有条目进行分类, 先利用 ISO-4 的标准进行缩写, 然后利用内置的数据进行缩写, 最后利用用户自定义的数据进行缩写, 从而实现优先级: `自定义 > 内置数据 > ISO-4 standard`. 且如果用户没有自定义数据文件,虽然会提示有错,但是不影响使用. (不过这样每次运行会消耗一点点时间)
 
   - 对所有条目进行分类, 规则如下
 
@@ -85,7 +79,7 @@
     ohther --> itemBoxRowabbr
     如果获得的值都为空,那么再从 journalAbbreviation 中尝试获取, 如果还是为空, 那么就为空白了
     对获取的字段会自动按照上述缩写规则进行缩写, 且不会添加任何 标签
-    
+
     ```
 
 - `replace` 选项, 按照指定的`json `文件, 进行条目缩写, 本质上就是调用 `str.replace()` 函数 或`str.match()`

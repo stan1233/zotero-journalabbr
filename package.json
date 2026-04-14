@@ -27,6 +27,7 @@
     "lint:fix": "prettier --write . && eslint . --fix",
     "release": "zotero-plugin release",
     "test": "echo \"Error: no test specified\" && exit 1",
+    "update-data:nlm": "node scripts/generate-nlm-data.mjs --output src/abbrtools/data.ts",
     "update-deps": "npm update --save"
   },
   "dependencies": {
